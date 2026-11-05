@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mide Cuarto</title>
+<meta name="description" content="Mide un cuarto con la cámara del celular: largo, ancho, m² y mini plano.">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #16181d; --muted: #5d6470;
+    --line: #dfe2e7; --accent: #0e7490; --accent-text: #ffffff; --danger: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111316; --card: #1b1e23; --text: #eceef1; --muted: #a0a7b2;
+      --line: #2c3037; --accent: #22b8cf; --accent-text: #06151a; --danger: #f97066;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111316; --card: #1b1e23; --text: #eceef1; --muted: #a0a7b2;
+    --line: #2c3037; --accent: #22b8cf; --accent-text: #06151a; --danger: #f97066;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 8px 0 4px; }
+  h2 { font-size: 1.1rem; margin: 0 0 12px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); font-size: .92rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin: 16px 0; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 10px; padding: 12px 16px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button.big { width: 100%; padding: 16px; font-size: 1.05rem; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 140px; }
+  label { display: block; font-size: .9rem; color: var(--muted); margin-bottom: 4px; }
+  input { width: 100%; font: inherit; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 12px 0; }
+  .stat { background: var(--bg); border-radius: 10px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: .85rem; color: var(--muted); }
+  .plan { background: #fff; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; }
+  .plan svg { display: block; width: 100%; height: auto; }
+  ul.rooms { list-style: none; padding: 0; margin: 0; }
+  ul.rooms li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+  ul.rooms li:first-child { border-top: 0; }
+  ul.rooms .info { flex: 1; cursor: pointer; }
+  ul.rooms .del { padding: 8px 12px; color: var(--danger); }
+  .total { display: flex; justify-content: space-between; font-weight: 600; padding-top: 10px; border-top: 1px solid var(--line); margin-top: 6px; }
+  .walls { font-size: .92rem; color: var(--muted); margin: 0; padding-left: 18px; }
+  .tips li { margin-bottom: 4px; }
+
+  /* Capas sobre la cámara (modo AR y modo apuntando) */
+  .cam { position: fixed; inset: 0; pointer-events: none; color: #fff; font-size: 15px;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  .cam .ui { pointer-events: auto; }
+  .cam .top { position: absolute; top: 0; left: 0; right: 0; padding: 14px 16px; padding-top: max(14px, env(safe-area-inset-top));
+    background: linear-gradient(rgba(0,0,0,.55), transparent); display: flex; gap: 12px; align-items: flex-start; }
+  .cam .top .txt { flex: 1; }
+  .cam .hint { font-weight: 600; font-size: 1.05rem; }
+  .cam .mini { width: 110px; height: 96px; background: rgba(255,255,255,.92); border-radius: 8px; flex: none; }
+  .cam .bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px; padding-bottom: max(18px, env(safe-area-inset-bottom));
+    display: flex; gap: 10px; background: linear-gradient(transparent, rgba(0,0,0,.55)); }
+  .cam .bottom button { flex: 1; background: rgba(20,20,20,.7); color: #fff; border-color: rgba(255,255,255,.3); text-shadow: none; padding: 14px 6px; }
+  .cam .bottom button.primary { background: #22b8cf; color: #06151a; border-color: #22b8cf; flex: 1.4; }
+  .cam .cross { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; }
+  .cam .cross::before, .cam .cross::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 2px #000; }
+  .cam .cross::before { left: 14px; top: 0; width: 2px; height: 30px; }
+  .cam .cross::after { top: 14px; left: 0; height: 2px; width: 30px; }
+  #tilt { background: #000; pointer-events: auto; z-index: 10; }
+  #tilt video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #tilt .setup { position: absolute; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom));
+    background: var(--card); color: var(--text); text-shadow: none; border-radius: 14px; padding: 16px; max-width: 520px; margin: 0 auto; }
+  #tilt .setup p { font-size: .92rem; }
+</style>
+</head>
+<body>
+<main id="app">
+  <h1>Mide Cuarto</h1>
+  <p class="muted">Mide un espacio con la cámara: largo, ancho, m² y mini plano con medidas.</p>
+
+  <!-- INICIO -->
+  <section id="home">
+    <div class="card">
+      <button id="btnAR" class="primary big" disabled>📷 Medir con la cámara</button>
+      <p id="arMsg" class="muted" style="margin:10px 0 12px">Revisando si tu equipo es compatible…</p>
+      <button id="btnTilt" class="big">🎯 Medir apuntando (iPhone y Android)</button>
+      <p id="tiltMsg" class="muted" style="margin:10px 0 12px">Te paras en el centro del cuarto y apuntas a cada esquina del piso.</p>
+      <button id="btnManual" class="big">✏️ Captura manual (largo × ancho)</button>
+    </div>
+
+    <div class="card">
+      <h2>Cómo medir bien</h2>
+      <p style="margin-bottom:4px"><b>Con la cámara (Android, más preciso: ±3–5 cm)</b></p>
+      <ol class="tips muted">
+        <li>Buena luz. Mueve el celular despacio apuntando al piso hasta que aparezca el círculo.</li>
+        <li>Pon la cruz en cada esquina del piso, en orden, y toca la pantalla.</li>
+        <li>Para cerrar, vuelve a la primera esquina o toca “Cerrar cuarto”.</li>
+      </ol>
+      <p style="margin-bottom:4px"><b>Apuntando (iPhone y Android: ±10–15 cm)</b></p>
+      <ol class="tips muted">
+        <li>Párate en el centro del cuarto con el celular a la altura del pecho. No camines: solo gira en tu lugar.</li>
+        <li>La primera vez, calibra: marca un punto en el piso a 2.00 m de tus pies y apúntale.</li>
+        <li>Apunta la cruz a cada esquina del piso, en orden, y toca “Marcar”.</li>
+      </ol>
+      <p class="muted" style="margin:0">Si un mueble tapa una esquina, marca la base de la pared justo junto al mueble. Para obra, verifica una pared con flexómetro.</p>
+    </div>
+
+    <div class="card">
+      <h2>Espacios medidos</h2>
+      <ul id="roomList" class="rooms"></ul>
+      <div id="total" class="total" hidden></div>
+      <div class="row" style="margin-top:14px">
+        <button id="btnCSV">Descargar Excel (CSV)</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- MANUAL -->
+  <section id="manual" hidden>
+    <div class="card">
+      <h2>Captura manual</h2>
+      <div class="row">
+        <div><label for="mLargo">Largo (m)</label><input id="mLargo" type="number" inputmode="decimal" step="0.01" min="0" placeholder="4.20"></div>
+        <div><label for="mAncho">Ancho (m)</label><input id="mAncho" type="number" inputmode="decimal" step="0.01" min="0" placeholder="3.10"></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button id="mCancel">Cancelar</button>
+        <button id="mOk" class="primary">Ver plano</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- RESULTADO -->
+  <section id="result" hidden>
+    <div class="card">
+      <label for="rName">Nombre del espacio</label>
+      <input id="rName" type="text" placeholder="Baño principal">
+      <div id="rPlan" class="plan" style="margin-top:14px"></div>
+      <div id="rStats" class="stats"></div>
+      <div class="row">
+        <div><label for="rAltura">Altura de muros (m), opcional</label>
+          <input id="rAltura" type="number" inputmode="decimal" step="0.01" min="0" placeholder="2.50"></div>
+      </div>
+      <p class="muted" style="margin:14px 0 6px">Medida de cada pared</p>
+      <ol id="rWalls" class="walls"></ol>
+      <div class="row" style="margin-top:16px">
+        <button id="rSave" class="primary">Guardar</button>
+        <button id="rPng">Descargar plano</button>
+        <button id="rShare" hidden>Compartir</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="rBack">Volver</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Capa que se ve encima de la cámara -->
+<div id="ar" class="cam" hidden>
+  <div class="top">
+    <div class="txt">
+      <div id="hint" class="hint">Mueve el celular despacio apuntando al piso…</div>
+      <div id="sub" style="opacity:.9;margin-top:4px"></div>
+    </div>
+    <svg id="mini" class="mini" viewBox="0 0 110 96"></svg>
+  </div>
+  <div class="cross"></div>
+  <div class="bottom ui">
+    <button id="aExit">Salir</button>
+    <button id="aUndo">Deshacer</button>
+    <button id="aClose" class="primary" disabled>Cerrar cuarto</button>
+  </div>
+</div>
+
+<!-- Modo apuntando: cámara normal + giroscopio (funciona en iPhone) -->
+<div id="tilt" class="cam" hidden>
+  <video id="tVideo" playsinline muted autoplay></video>
+  <div class="top">
+    <div class="txt">
+      <div id="tHint" class="hint">Apunta a una esquina del piso</div>
+      <div id="tSub" style="opacity:.9;margin-top:4px"></div>
+    </div>
+    <svg id="tMini" class="mini" viewBox="0 0 110 96"></svg>
+  </div>
+  <div class="cross"></div>
+  <div id="tBar" class="bottom ui" hidden>
+    <button id="tExit">Salir</button>
+    <button id="tUndo">Deshacer</button>
+    <button id="tMark" class="primary">Marcar</button>
+    <button id="tClose" disabled>Cerrar</button>
+  </div>
+  <div id="tSetup" class="setup ui">
+    <p><b>Antes de empezar</b> — párate en el centro del cuarto y sostén el celular a la altura del pecho, como lo vas a usar.</p>
+    <label for="tH">Altura del celular sobre el piso (m)</label>
+    <input id="tH" type="number" inputmode="decimal" step="0.01" min="0.5" max="2.2">
+    <p style="margin:10px 0">Mejor aún: pon una marca en el piso a <b>2.00 m</b> de tus pies, apúntale con la cruz y toca “Calibrar”.</p>
+    <div class="row">
+      <button id="tCal">Calibrar con 2 m</button>
+      <button id="tGo" class="primary">Empezar</button>
+    </div>
+    <div class="row" style="margin-top:10px"><button id="tExit2">Cancelar</button></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const f2 = n => (Math.round(n * 100) / 100).toFixed(2);
+const KEY = 'midecuarto.rooms.v1';
+
+/* ---------- Guardado local ---------- */
+function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; } }
+function persist() { try { localStorage.setItem(KEY, JSON.stringify(rooms)); } catch (e) {} }
+let rooms = load();
+let current = null;
+
+function show(id) {
+  for (const s of ['home', 'manual', 'result']) $('#' + s).hidden = s !== id;
+  window.scrollTo(0, 0);
+}
+
+/* ---------- Geometría ---------- */
+function signedArea(p) {
+  let s = 0;
+  for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; s += a[0] * b[1] - b[0] * a[1]; }
+  return s / 2;
+}
+// Gira el cuarto para que la primera pared quede horizontal y lo pega al origen.
+function normalize(p) {
+  if (p.length < 2) return p.map(q => [0, 0]);
+  const ang = Math.atan2(p[1][1] - p[0][1], p[1][0] - p[0][0]);
+  const c = Math.cos(-ang), s = Math.sin(-ang);
+  const r = p.map(([x, y]) => { x -= p[0][0]; y -= p[0][1]; return [x * c - y * s, x * s + y * c]; });
+  const mx = Math.min(...r.map(q => q[0])), my = Math.min(...r.map(q => q[1]));
+  return r.map(([x, y]) => [x - mx, y - my]);
+}
+const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+function stats(pts, altura) {
+  const n = normalize(pts);
+  const w = Math.max(...n.map(q => q[0])), h = Math.max(...n.map(q => q[1]));
+  const walls = n.map((a, i) => dist(a, n[(i + 1) % n.length]));
+  const perimetro = walls.reduce((s, x) => s + x, 0);
+  const alt = parseFloat(altura);
+  return {
+    largo: Math.max(w, h), ancho: Math.min(w, h),
+    area: Math.abs(signedArea(n)), perimetro, walls,
+    altura: alt > 0 ? alt : null,
+    muros: alt > 0 ? perimetro * alt : null,
+  };
+}
+
+/* ---------- Dibujo del plano (SVG) ---------- */
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function planSVG(pts, { title = '', subtitle = '', W = 600, H = 520, mini = false, closed = true } = {}) {
+  const head = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Arial, Helvetica, sans-serif">`;
+  if (!pts.length) return head + `<rect width="${W}" height="${H}" fill="#fff"/></svg>`;
+  const n = normalize(pts);
+  const top = mini ? 8 : 104, m = mini ? 8 : 62, bottom = mini ? 8 : 64;
+  const bw = Math.max(0.01, ...n.map(q => q[0])), bh = Math.max(0.01, ...n.map(q => q[1]));
+  const sc = Math.min((W - 2 * m) / bw, (H - top - bottom) / bh);
+  const ox = (W - bw * sc) / 2, oy = top + ((H - top - bottom) - bh * sc) / 2;
+  const P = n.map(([x, y]) => [ox + x * sc, oy + y * sc]);
+  const ptsAttr = P.map(q => q.map(v => v.toFixed(1)).join(',')).join(' ');
+  let s = head + `<rect width="${W}" height="${H}" fill="#fff"/>`;
+
+  if (mini) {
+    const tag = closed && P.length > 2 ? 'polygon' : 'polyline';
+    s += `<${tag} points="${ptsAttr}" fill="${tag === 'polygon' ? '#cff4fa' : 'none'}" stroke="#0e7490" stroke-width="3" stroke-linejoin="round"/>`;
+    P.forEach(q => s += `<circle cx="${q[0]}" cy="${q[1]}" r="3" fill="#0e7490"/>`);
+    return s + '</svg>';
+  }
+
+  // Cuadrícula de 1 m
+  s += `<g stroke="#eef1f4" stroke-width="1">`;
+  for (let x = ox; x <= ox + bw * sc + 0.5; x += sc) s += `<line x1="${x}" y1="${oy}" x2="${x}" y2="${oy + bh * sc}"/>`;
+  for (let y = oy; y <= oy + bh * sc + 0.5; y += sc) s += `<line x1="${ox}" y1="${y}" x2="${ox + bw * sc}" y2="${y}"/>`;
+  s += `</g>`;
+
+  if (title) s += `<text x="${W / 2}" y="32" text-anchor="middle" font-size="22" font-weight="bold" fill="#16181d">${esc(title)}</text>`;
+  if (subtitle) s += `<text x="${W / 2}" y="56" text-anchor="middle" font-size="15" fill="#5d6470">${esc(subtitle)}</text>`;
+
+  s += `<polygon points="${ptsAttr}" fill="#e6f7fa" fill-opacity=".7" stroke="#16181d" stroke-width="6" stroke-linejoin="miter"/>`;
+
+  // Medida de cada pared, por fuera del cuarto
+  const sa = signedArea(P);
+  P.forEach((a, i) => {
+    const b = P[(i + 1) % P.length];
+    const len = dist(n[i], n[(i + 1) % n.length]);
+    const L = dist(a, b) || 1;
+    const d = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+    const nrm = sa > 0 ? [d[1], -d[0]] : [-d[1], d[0]];
+    const mx = (a[0] + b[0]) / 2 + nrm[0] * 22, my = (a[1] + b[1]) / 2 + nrm[1] * 22;
+    let ang = Math.atan2(d[1], d[0]) * 180 / Math.PI;
+    if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
+    s += `<text x="${mx.toFixed(1)}" y="${my.toFixed(1)}" font-size="16" font-weight="bold" fill="#0e7490" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang.toFixed(1)} ${mx.toFixed(1)} ${my.toFixed(1)})">${f2(len)} m</text>`;
+  });
+  P.forEach(q => s += `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#16181d"/>`);
+
+  // m² al centro
+  let cx = 0, cy = 0, A = 0;
+  P.forEach((a, i) => { const b = P[(i + 1) % P.length]; const k = a[0] * b[1] - b[0] * a[1]; A += k; cx += (a[0] + b[0]) * k; cy += (a[1] + b[1]) * k; });
+  if (Math.abs(A) > 1) { cx /= 3 * A; cy /= 3 * A; } else { cx = W / 2; cy = H / 2; }
+  s += `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="24" font-weight="bold" fill="#16181d">${f2(Math.abs(signedArea(n)))} m²</text>`;
+
+  // Escala gráfica
+  const unit = sc > 160 ? 0.5 : 1;
+  const sx = 20, sy = H - 22;
+  s += `<line x1="${sx}" y1="${sy}" x2="${sx + unit * sc}" y2="${sy}" stroke="#16181d" stroke-width="3"/>`;
+  s += `<line x1="${sx}" y1="${sy - 6}" x2="${sx}" y2="${sy + 6}" stroke="#16181d" stroke-width="2"/><line x1="${sx + unit * sc}" y1="${sy - 6}" x2="${sx + unit * sc}" y2="${sy + 6}" stroke="#16181d" stroke-width="2"/>`;
+  s += `<text x="${sx + unit * sc + 8}" y="${sy + 5}" font-size="13" fill="#5d6470">${unit === 1 ? '1 m' : '50 cm'}</text>`;
+  s += `<text x="${W - 16}" y="${sy + 5}" text-anchor="end" font-size="12" fill="#9aa1ab">Mide Cuarto · ${new Date().toLocaleDateString('es-MX')}</text>`;
+  return s + '</svg>';
+}
+
+/* ---------- Pantalla de resultado ---------- */
+function titles(r) {
+  const st = stats(r.pts, r.altura);
+  return { title: r.nombre || 'Espacio', subtitle: `${f2(st.largo)} × ${f2(st.ancho)} m · ${f2(st.area)} m²`, st };
+}
+function renderResult() {
+  const { title, subtitle, st } = titles(current);
+  $('#rPlan').innerHTML = planSVG(current.pts, { title, subtitle });
+  $('#rStats').innerHTML = [
+    ['Largo', f2(st.largo) + ' m'], ['Ancho', f2(st.ancho) + ' m'],
+    ['Área de piso', f2(st.area) + ' m²'], ['Perímetro', f2(st.perimetro) + ' m'],
+    ['Área de muros', st.muros ? f2(st.muros) + ' m²' : '—'], ['Esquinas', String(current.pts.length)],
+  ].map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
+  $('#rWalls').innerHTML = st.walls.map(w => `<li>${f2(w)} m</li>`).join('');
+}
+function openResult(r) {
+  current = r;
+  $('#rName').value = r.nombre || '';
+  $('#rAltura').value = r.altura || '';
+  renderResult();
+  show('result');
+}
+$('#rName').addEventListener('input', e => { current.nombre = e.target.value; renderResult(); });
+$('#rAltura').addEventListener('input', e => { current.altura = e.target.value; renderResult(); });
+$('#rBack').onclick = () => { renderHome(); show('home'); };
+$('#rSave').onclick = () => {
+  if (!current.id) { current.id = Date.now(); current.fecha = new Date().toISOString(); rooms.push(current); }
+  persist(); renderHome(); show('home');
+};
+
+async function planPNG() {
+  const { title, subtitle } = titles(current);
+  const svg = planSVG(current.pts, { title, subtitle });
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  const img = new Image();
+  await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = url; });
+  const c = document.createElement('canvas'); c.width = 1200; c.height = 1040;
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(img, 0, 0, c.width, c.height);
+  URL.revokeObjectURL(url);
+  return new Promise(ok => c.toBlob(ok, 'image/png'));
+}
+function download(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+const fileName = () => 'plano-' + (current.nombre || 'espacio').trim().replace(/[^\w\-áéíóúñÁÉÍÓÚÑ]+/g, '-') + '.png';
+$('#rPng').onclick = async () => download(await planPNG(), fileName());
+if (navigator.canShare) {
+  $('#rShare').hidden = false;
+  $('#rShare').onclick = async () => {
+    const file = new File([await planPNG()], fileName(), { type: 'image/png' });
+    try {
+      if (navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: current.nombre || 'Plano' });
+      else download(file, file.name);
+    } catch (e) { /* el usuario canceló */ }
+  };
+}
+
+/* ---------- Inicio: lista de espacios ---------- */
+function renderHome() {
+  const ul = $('#roomList');
+  if (!rooms.length) { ul.innerHTML = '<li class="muted">Aún no hay espacios guardados.</li>'; $('#total').hidden = true; return; }
+  let tot = 0;
+  ul.innerHTML = rooms.map((r, i) => {
+    const st = stats(r.pts, r.altura); tot += st.area;
+    return `<li><div class="info" data-i="${i}"><b>${esc(r.nombre || 'Espacio')}</b><br>
+      <span class="muted">${f2(st.largo)} × ${f2(st.ancho)} m · ${f2(st.area)} m²</span></div>
+      <button class="del" data-del="${i}" aria-label="Borrar">✕</button></li>`;
+  }).join('');
+  $('#total').hidden = false;
+  $('#total').innerHTML = `<span>Total de piso</span><span>${f2(tot)} m²</span>`;
+}
+$('#roomList').addEventListener('click', e => {
+  const info = e.target.closest('[data-i]'), del = e.target.closest('[data-del]');
+  if (del) { const r = rooms[+del.dataset.del]; if (confirm(`¿Borrar "${r.nombre || 'Espacio'}"?`)) { rooms.splice(+del.dataset.del, 1); persist(); renderHome(); } }
+  else if (info) openResult(rooms[+info.dataset.i]);
+});
+$('#btnCSV').onclick = () => {
+  if (!rooms.length) return alert('Primero guarda al menos un espacio.');
+  const rows = [['Nombre', 'Largo (m)', 'Ancho (m)', 'Área piso (m2)', 'Perímetro (m)', 'Altura (m)', 'Área muros (m2)', 'Paredes (m)']];
+  rooms.forEach(r => {
+    const st = stats(r.pts, r.altura);
+    rows.push([r.nombre || 'Espacio', f2(st.largo), f2(st.ancho), f2(st.area), f2(st.perimetro),
+      st.altura ? f2(st.altura) : '', st.muros ? f2(st.muros) : '', st.walls.map(f2).join(' / ')]);
+  });
+  const csv = '﻿' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'medidas.csv');
+};
+
+/* ---------- Captura manual ---------- */
+$('#btnManual').onclick = () => { $('#mLargo').value = ''; $('#mAncho').value = ''; show('manual'); $('#mLargo').focus(); };
+$('#mCancel').onclick = () => show('home');
+$('#mOk').onclick = () => {
+  const L = parseFloat($('#mLargo').value), A = parseFloat($('#mAncho').value);
+  if (!(L > 0 && A > 0)) return alert('Escribe largo y ancho en metros.');
+  openResult({ nombre: 'Espacio ' + (rooms.length + 1), pts: [[0, 0], [L, 0], [L, A], [0, A]], altura: '' });
+};
+
+/* ---------- Medición con cámara (WebXR + ARCore) ---------- */
+let renderer, scene, camera, reticle, lineRubber, session = null, hitSource = null, finishing = false;
+let arPts = [], arObjs = [], lastUi = 0;
+const reticlePos = new THREE.Vector3();
+const flat = v => [v.x, v.z];   // vista desde arriba
+
+function initThree() {
+  if (renderer) return;
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType('local');
+  renderer.domElement.style.display = 'none';
+  document.body.appendChild(renderer.domElement);
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 40);
+  reticle = new THREE.Mesh(new THREE.RingGeometry(0.045, 0.065, 32).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  reticle.matrixAutoUpdate = false; reticle.visible = false; scene.add(reticle);
+  lineRubber = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff }));
+  scene.add(lineRubber);
+}
+
+const matCorner = new THREE.MeshBasicMaterial({ color: 0x22d3ee });
+const matWall = new THREE.MeshBasicMaterial({ color: 0x22d3ee });
+function rebuildMarks() {
+  arObjs.forEach(o => { scene.remove(o); o.geometry.dispose(); });
+  arObjs = [];
+  arPts.forEach((p, i) => {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(0.018, 16, 12), matCorner);
+    s.position.copy(p); scene.add(s); arObjs.push(s);
+    if (i > 0) {
+      const a = arPts[i - 1], len = a.distanceTo(p);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(len, 0.006, 0.012), matWall);
+      bar.position.copy(a).add(p).multiplyScalar(0.5);
+      bar.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), p.clone().sub(a).normalize());
+      scene.add(bar); arObjs.push(bar);
+    }
+  });
+  $('#aClose').disabled = arPts.length < 3;
+  $('#mini').innerHTML = planSVG(arPts.map(flat), { mini: true, W: 110, H: 96, closed: false }).replace(/^<svg[^>]*>|<\/svg>$/g, '');
+}
+
+const nearFirst = () => arPts.length >= 3 &&
+  Math.hypot(reticlePos.x - arPts[0].x, reticlePos.z - arPts[0].z) < 0.12;
+
+function updateHud() {
+  let hint, sub = '';
+  const per = arPts.reduce((s, p, i) => i ? s + Math.hypot(p.x - arPts[i - 1].x, p.z - arPts[i - 1].z) : 0, 0);
+  if (!reticle.visible) hint = 'Mueve el celular despacio apuntando al piso…';
+  else if (!arPts.length) hint = 'Pon la cruz en una esquina del piso y toca la pantalla';
+  else if (nearFirst()) hint = '✅ Toca para cerrar el cuarto';
+  else {
+    const l = arPts[arPts.length - 1];
+    hint = `Esquina ${arPts.length + 1} · pared: ${f2(Math.hypot(reticlePos.x - l.x, reticlePos.z - l.z))} m`;
+  }
+  if (arPts.length) sub = `${arPts.length} esquina${arPts.length > 1 ? 's' : ''} · ${f2(per)} m de pared`;
+  $('#hint').textContent = hint; $('#sub').textContent = sub;
+}
+
+function onFrame(t, frame) {
+  if (!frame) return;
+  const ref = renderer.xr.getReferenceSpace();
+  const hits = hitSource ? frame.getHitTestResults(hitSource) : [];
+  if (hits.length) {
+    const pose = hits[0].getPose(ref);
+    reticle.visible = true;
+    reticle.matrix.fromArray(pose.transform.matrix);
+    reticlePos.setFromMatrixPosition(reticle.matrix);
+  } else reticle.visible = false;
+
+  const close = nearFirst();
+  reticle.material.color.set(close ? 0x4ade80 : 0xffffff);
+  if (arPts.length && reticle.visible) {
+    lineRubber.visible = true;
+    lineRubber.geometry.setFromPoints([arPts[arPts.length - 1], close ? arPts[0] : reticlePos]);
+  } else lineRubber.visible = false;
+
+  if (t - lastUi > 120) { lastUi = t; updateHud(); }
+  renderer.render(scene, camera);
+}
+
+function onSelect() {
+  if (!reticle.visible) return;
+  if (nearFirst()) return finishAR();
+  arPts.push(reticlePos.clone());
+  if (navigator.vibrate) navigator.vibrate(30);
+  rebuildMarks();
+}
+
+function finishAR() {
+  if (arPts.length < 3) return;
+  current = { nombre: 'Espacio ' + (rooms.length + 1), pts: arPts.map(flat), altura: '' };
+  finishing = true;
+  session.end();
+}
+
+function onSessionEnd() {
+  renderer.setAnimationLoop(null);
+  if (hitSource) { hitSource.cancel(); hitSource = null; }
+  session = null; arPts = []; rebuildMarks();
+  $('#ar').hidden = true;
+  if (finishing) { finishing = false; openResult(current); } else show('home');
+}
+
+async function startAR() {
+  initThree();
+  const overlay = $('#ar');
+  overlay.hidden = false;
+  try {
+    session = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay'], domOverlay: { root: overlay },
+    });
+  } catch (e) {
+    overlay.hidden = true;
+    alert('No se pudo abrir la cámara en modo AR: ' + e.message);
+    return;
+  }
+  session.addEventListener('end', onSessionEnd);
+  session.addEventListener('select', onSelect);
+  await renderer.xr.setSession(session);
+  const viewer = await session.requestReferenceSpace('viewer');
+  hitSource = await session.requestHitTestSource({ space: viewer });
+  arPts = []; rebuildMarks(); updateHud();
+  renderer.setAnimationLoop(onFrame);
+}
+
+// Que tocar los botones no marque una esquina
+$('#ar').addEventListener('beforexrselect', e => { if (e.target.closest('.ui')) e.preventDefault(); });
+$('#aUndo').onclick = () => { arPts.pop(); rebuildMarks(); };
+$('#aClose').onclick = finishAR;
+$('#aExit').onclick = () => session && session.end();
+$('#btnAR').onclick = startAR;
+
+(async () => {
+  let ok = false;
+  try { ok = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')); } catch (e) {}
+  $('#btnAR').disabled = !ok;
+  $('#arMsg').textContent = ok ? 'Tu equipo es compatible. Toca para empezar.'
+    : !window.isSecureContext ? 'La página debe abrirse desde una dirección https:// para usar la cámara.'
+    : 'Medición con cámara AR: solo en Chrome de Android con “Servicios de Google Play para RA”. En iPhone usa “Medir apuntando”.';
+})();
+
+/* ---------- Medición apuntando (iPhone y cualquier celular) ----------
+   Te quedas fijo en un punto. Con la inclinación del celular y su altura sobre el piso
+   se calcula a qué distancia está el punto del piso que marca la cruz. */
+const HKEY = 'midecuarto.altcel.v1';
+const D2R = Math.PI / 180;
+let tStream = null, tPts = [], tBuf = [], tRunning = false, tLast = 0, tStart = 0;
+let tH = (() => { try { return parseFloat(localStorage.getItem(HKEY)); } catch (e) { return NaN; } })() || 1.35;
+
+// Dirección hacia donde ve la cámara trasera, en coordenadas del cuarto (x, y horizontales; z hacia arriba).
+function camDir(a, b, g) {
+  a *= D2R; b *= D2R; g *= D2R;
+  const sa = Math.sin(a), ca = Math.cos(a), sb = Math.sin(b), cb = Math.cos(b), sg = Math.sin(g), cg = Math.cos(g);
+  return [-(cg * sa * sb + ca * sg), -(sa * sg - ca * cg * sb), -cb * cg];
+}
+function onOrient(e) {
+  if (e.alpha == null || e.beta == null) return;
+  const now = performance.now();
+  tBuf.push([now, camDir(e.alpha, e.beta, e.gamma)]);
+  while (tBuf.length && tBuf[0][0] < now - 350) tBuf.shift();
+}
+// Promedio de las últimas lecturas para quitar el temblor de la mano.
+function avgDir() {
+  if (!tBuf.length) return null;
+  const s = [0, 0, 0];
+  tBuf.forEach(([, d]) => { s[0] += d[0]; s[1] += d[1]; s[2] += d[2]; });
+  const L = Math.hypot(...s) || 1;
+  return s.map(v => v / L);
+}
+function floorPoint(d) {
+  if (!d || d[2] > -0.1) return null;          // apuntando muy horizontal
+  const k = tH / -d[2];
+  const p = [d[0] * k, -d[1] * k];
+  return Math.hypot(p[0], p[1]) > 8 ? null : p;
+}
+const tNearFirst = p => p && tPts.length >= 3 && dist(p, tPts[0]) < 0.15;
+
+function tRebuild() {
+  $('#tMini').innerHTML = planSVG(tPts, { mini: true, W: 110, H: 96, closed: false }).replace(/^<svg[^>]*>|<\/svg>$/g, '');
+  $('#tClose').disabled = tPts.length < 3;
+  const per = tPts.reduce((s, p, i) => i ? s + dist(tPts[i - 1], p) : 0, 0);
+  $('#tSub').textContent = tPts.length ? `${tPts.length} esquina${tPts.length > 1 ? 's' : ''} · ${f2(per)} m de pared` : `Altura del celular: ${f2(tH)} m`;
+}
+function tLoop() {
+  if (!tRunning) return;
+  requestAnimationFrame(tLoop);
+  const now = performance.now();
+  if (now - tLast < 120) return;
+  tLast = now;
+  const d = avgDir(), p = floorPoint(d);
+  let hint;
+  if (!d) hint = now - tStart > 2000 ? 'Tu equipo no está enviando datos del giroscopio' : 'Mueve un poco el celular…';
+  else if (!p) hint = 'Apunta más abajo, a una esquina del piso';
+  else if (tNearFirst(p)) hint = '✅ Toca “Marcar” para cerrar el cuarto';
+  else if (tPts.length) hint = `Pared: ${f2(dist(tPts[tPts.length - 1], p))} m`;
+  else hint = `Esquina a ${f2(Math.hypot(p[0], p[1]))} m de ti`;
+  $('#tHint').textContent = hint;
+}
+
+async function startTilt() {
+  // iPhone pide permiso para el giroscopio; debe pedirse justo al tocar el botón.
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      if (await DeviceOrientationEvent.requestPermission() !== 'granted') throw new Error('Se necesita permiso de movimiento y orientación.');
+    }
+  } catch (e) { return alert(e.message); }
+  try {
+    tStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+  } catch (e) { return alert('No se pudo abrir la cámara: ' + e.message); }
+  const v = $('#tVideo'); v.srcObject = tStream; v.play().catch(() => {});
+  window.addEventListener('deviceorientation', onOrient);
+  tPts = []; tBuf = []; tStart = performance.now();
+  $('#tH').value = f2(tH);
+  $('#tSetup').hidden = false; $('#tBar').hidden = true;
+  $('#app').hidden = true; $('#tilt').hidden = false;
+  tRunning = true; tLoop(); tRebuild();
+}
+function stopTilt() {
+  tRunning = false;
+  window.removeEventListener('deviceorientation', onOrient);
+  if (tStream) tStream.getTracks().forEach(t => t.stop());
+  tStream = null;
+  $('#tilt').hidden = true; $('#app').hidden = false;
+}
+function saveH(h) { tH = h; try { localStorage.setItem(HKEY, String(h)); } catch (e) {} }
+
+$('#tCal').onclick = () => {
+  const d = avgDir();
+  if (!d || d[2] > -0.1) return alert('Apunta la cruz a la marca del piso que está a 2.00 m.');
+  const h = 2 * -d[2] / Math.hypot(d[0], d[1]);
+  if (h < 0.5 || h > 2.2) return alert('La calibración salió rara (' + f2(h) + ' m). Intenta de nuevo con el celular quieto.');
+  saveH(h); $('#tH').value = f2(h);
+  if (navigator.vibrate) navigator.vibrate(40);
+};
+$('#tGo').onclick = () => {
+  const h = parseFloat($('#tH').value);
+  if (!(h >= 0.5 && h <= 2.2)) return alert('Escribe una altura entre 0.50 y 2.20 m.');
+  saveH(h); $('#tSetup').hidden = true; $('#tBar').hidden = false; tRebuild();
+};
+$('#tMark').onclick = () => {
+  const p = floorPoint(avgDir());
+  if (!p) return;
+  if (tNearFirst(p)) return finishTilt();
+  tPts.push(p);
+  if (navigator.vibrate) navigator.vibrate(30);
+  tRebuild();
+};
+function finishTilt() {
+  if (tPts.length < 3) return;
+  const pts = tPts.slice();
+  stopTilt();
+  openResult({ nombre: 'Espacio ' + (rooms.length + 1), pts, altura: '' });
+}
+$('#tUndo').onclick = () => { tPts.pop(); tRebuild(); };
+$('#tClose').onclick = finishTilt;
+$('#tExit').onclick = $('#tExit2').onclick = () => { stopTilt(); show('home'); };
+$('#btnTilt').onclick = startTilt;
+if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  $('#btnTilt').disabled = true;
+  $('#tiltMsg').textContent = window.isSecureContext ? 'Este navegador no permite usar la cámara.' : 'La página debe abrirse desde una dirección https:// para usar la cámara.';
+}
+
+renderHome();
+</script>
+</body>
+</html>

@@ -63,7 +63,7 @@
     background: linear-gradient(rgba(0,0,0,.55), transparent); display: flex; gap: 12px; align-items: flex-start; }
   .cam .top .txt { flex: 1; }
   .cam .hint { font-weight: 600; font-size: 1.05rem; }
-  .cam .mini { width: 110px; height: 96px; background: rgba(255,255,255,.92); border-radius: 8px; flex: none; }
+  .cam .mini { width: 150px; height: 131px; background: rgba(255,255,255,.92); border-radius: 8px; flex: none; }
   .cam .bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px; padding-bottom: max(18px, env(safe-area-inset-bottom));
     display: flex; gap: 10px; background: linear-gradient(transparent, rgba(0,0,0,.55)); }
   .cam .bottom button { flex: 1; background: rgba(20,20,20,.7); color: #fff; border-color: rgba(255,255,255,.3); text-shadow: none; padding: 14px 6px; }
@@ -87,15 +87,16 @@
   <!-- INICIO -->
   <section id="home">
     <div class="card">
-      <button id="btnAR" class="primary big" disabled>📷 Medir con la cámara</button>
-      <p id="arMsg" class="muted" style="margin:10px 0 12px">Revisando si tu equipo es compatible…</p>
-      <button id="btnTilt" class="big">🎯 Medir apuntando (iPhone y Android)</button>
-      <p id="tiltMsg" class="muted" style="margin:10px 0 12px">Te paras en el centro del cuarto y apuntas a cada esquina del piso.</p>
-      <button id="btnManual" class="big">✏️ Captura manual (largo × ancho)</button>
+      <button id="btnStart" class="primary big" style="font-size:1.25rem;padding:22px">📏 Medir un cuarto</button>
+      <p id="startMsg" class="muted" style="margin:10px 0 14px;text-align:center">Apunta a cada esquina del piso y toca la pantalla.</p>
+      <button id="btnManual" class="big">✏️ Escribir medidas a mano</button>
+      <button id="btnAR" hidden></button><button id="btnTilt" hidden></button>
+      <p id="arMsg" hidden></p><p id="tiltMsg" hidden></p>
     </div>
 
-    <div class="card">
-      <h2>Cómo medir bien</h2>
+    <details class="card">
+      <summary style="cursor:pointer;font-weight:600">¿Cómo medir bien?</summary>
+      <div style="margin-top:12px">
       <p style="margin-bottom:4px"><b>Con la cámara (Android, más preciso: ±3–5 cm)</b></p>
       <ol class="tips muted">
         <li>Buena luz. Mueve el celular despacio apuntando al piso hasta que aparezca el círculo.</li>
@@ -109,7 +110,8 @@
         <li>Apunta la cruz a cada esquina del piso, en orden, y toca “Marcar”.</li>
       </ol>
       <p class="muted" style="margin:0">Si un mueble tapa una esquina, marca la base de la pared justo junto al mueble. Para obra, verifica una pared con flexómetro.</p>
-    </div>
+      </div>
+    </details>
 
     <div class="card">
       <h2>Espacios medidos</h2>
@@ -150,13 +152,13 @@
       <p class="muted" style="margin:14px 0 6px">Medida de cada pared</p>
       <ol id="rWalls" class="walls"></ol>
       <div class="row" style="margin-top:16px">
-        <button id="rSave" class="primary">Guardar</button>
+        <button id="rShare" class="primary" hidden>Enviar plano</button>
         <button id="rPng">Descargar plano</button>
-        <button id="rShare" hidden>Compartir</button>
       </div>
       <div class="row" style="margin-top:10px">
-        <button id="rBack">Volver</button>
+        <button id="rSave">Listo</button>
       </div>
+      <button id="rBack" hidden></button>
     </div>
   </section>
 </main>
@@ -184,7 +186,7 @@
   <div class="top">
     <div class="txt">
       <div id="tHint" class="hint">Apunta a una esquina del piso</div>
-      <div id="tSub" style="opacity:.9;margin-top:4px"></div>
+      <div id="tSub" class="ui" style="opacity:.9;margin-top:4px;cursor:pointer"></div>
     </div>
     <svg id="tMini" class="mini" viewBox="0 0 110 96"></svg>
   </div>
@@ -196,15 +198,22 @@
     <button id="tClose" disabled>Cerrar</button>
   </div>
   <div id="tSetup" class="setup ui">
-    <p><b>Antes de empezar</b> — párate en el centro del cuarto y sostén el celular a la altura del pecho, como lo vas a usar.</p>
-    <label for="tH">Altura del celular sobre el piso (m)</label>
-    <input id="tH" type="number" inputmode="decimal" step="0.01" min="0.5" max="2.2">
-    <p style="margin:10px 0">Mejor aún: pon una marca en el piso a <b>2.00 m</b> de tus pies, apúntale con la cruz y toca “Calibrar”.</p>
+    <p style="font-size:1.05rem"><b>Párate en el centro del cuarto.</b><br>¿A qué altura vas a sostener el celular?</p>
     <div class="row">
-      <button id="tCal">Calibrar con 2 m</button>
-      <button id="tGo" class="primary">Empezar</button>
+      <button class="primary hpick" data-h="1.30">Pecho</button>
+      <button class="primary hpick" data-h="1.45">Hombro</button>
+      <button class="primary hpick" data-h="1.55">Ojos</button>
     </div>
-    <div class="row" style="margin-top:10px"><button id="tExit2">Cancelar</button></div>
+    <details style="margin-top:12px">
+      <summary class="muted" style="cursor:pointer">Más preciso: calibrar con flexómetro</summary>
+      <p style="margin:10px 0">Pon una marca en el piso a <b>2.00 m</b> de tus pies, apúntale con la cruz y toca “Calibrar”.</p>
+      <div class="row">
+        <input id="tH" type="number" inputmode="decimal" step="0.01" min="0.5" max="2.2" aria-label="Altura del celular (m)">
+        <button id="tCal">Calibrar</button>
+        <button id="tGo">Usar esta altura</button>
+      </div>
+    </details>
+    <div class="row" style="margin-top:12px"><button id="tExit2">Cancelar</button></div>
   </div>
 </div>
 
@@ -340,8 +349,14 @@ function openResult(r) {
   renderResult();
   show('result');
 }
-$('#rName').addEventListener('input', e => { current.nombre = e.target.value; renderResult(); });
-$('#rAltura').addEventListener('input', e => { current.altura = e.target.value; renderResult(); });
+// Cada medición se guarda sola al terminar; los cambios de nombre o altura también.
+function autoSave(pts) {
+  const r = { id: Date.now(), fecha: new Date().toISOString(), nombre: 'Espacio ' + (rooms.length + 1), pts, altura: '' };
+  rooms.push(r); persist();
+  return r;
+}
+$('#rName').addEventListener('input', e => { current.nombre = e.target.value; renderResult(); if (current.id) persist(); });
+$('#rAltura').addEventListener('input', e => { current.altura = e.target.value; renderResult(); if (current.id) persist(); });
 $('#rBack').onclick = () => { renderHome(); show('home'); };
 $('#rSave').onclick = () => {
   if (!current.id) { current.id = Date.now(); current.fecha = new Date().toISOString(); rooms.push(current); }
@@ -414,7 +429,7 @@ $('#mCancel').onclick = () => show('home');
 $('#mOk').onclick = () => {
   const L = parseFloat($('#mLargo').value), A = parseFloat($('#mAncho').value);
   if (!(L > 0 && A > 0)) return alert('Escribe largo y ancho en metros.');
-  openResult({ nombre: 'Espacio ' + (rooms.length + 1), pts: [[0, 0], [L, 0], [L, A], [0, A]], altura: '' });
+  openResult(autoSave([[0, 0], [L, 0], [L, A], [0, A]]));
 };
 
 /* ---------- Medición con cámara (WebXR + ARCore) ---------- */
@@ -510,7 +525,7 @@ function onSelect() {
 
 function finishAR() {
   if (arPts.length < 3) return;
-  current = { nombre: 'Espacio ' + (rooms.length + 1), pts: arPts.map(flat), altura: '' };
+  current = autoSave(arPts.map(flat));
   finishing = true;
   session.end();
 }
@@ -551,10 +566,15 @@ $('#aUndo').onclick = () => { arPts.pop(); rebuildMarks(); };
 $('#aClose').onclick = finishAR;
 $('#aExit').onclick = () => session && session.end();
 $('#btnAR').onclick = startAR;
+let arOK = false;
+// Un solo botón: usa la cámara AR si el equipo puede; si no (iPhone), el modo apuntando.
+$('#btnStart').onclick = () => arOK ? startAR() : startTilt();
 
 (async () => {
   let ok = false;
   try { ok = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')); } catch (e) {}
+  arOK = ok;
+  if (ok) $('#startMsg').textContent = 'Camina por el cuarto y toca la pantalla en cada esquina del piso.';
   $('#btnAR').disabled = !ok;
   $('#arMsg').textContent = ok ? 'Tu equipo es compatible. Toca para empezar.'
     : !window.isSecureContext ? 'La página debe abrirse desde una dirección https:// para usar la cámara.'
@@ -601,7 +621,7 @@ function tRebuild() {
   $('#tMini').innerHTML = planSVG(tPts, { mini: true, W: 110, H: 96, closed: false }).replace(/^<svg[^>]*>|<\/svg>$/g, '');
   $('#tClose').disabled = tPts.length < 3;
   const per = tPts.reduce((s, p, i) => i ? s + dist(tPts[i - 1], p) : 0, 0);
-  $('#tSub').textContent = tPts.length ? `${tPts.length} esquina${tPts.length > 1 ? 's' : ''} · ${f2(per)} m de pared` : `Altura del celular: ${f2(tH)} m`;
+  $('#tSub').textContent = (tPts.length ? `${tPts.length} esquina${tPts.length > 1 ? 's' : ''} · ${f2(per)} m de pared · ` : '') + `altura ${f2(tH)} m (cambiar)`;
 }
 function tLoop() {
   if (!tRunning) return;
@@ -613,9 +633,9 @@ function tLoop() {
   let hint;
   if (!d) hint = now - tStart > 2000 ? 'Tu equipo no está enviando datos del giroscopio' : 'Mueve un poco el celular…';
   else if (!p) hint = 'Apunta más abajo, a una esquina del piso';
-  else if (tNearFirst(p)) hint = '✅ Toca “Marcar” para cerrar el cuarto';
-  else if (tPts.length) hint = `Pared: ${f2(dist(tPts[tPts.length - 1], p))} m`;
-  else hint = `Esquina a ${f2(Math.hypot(p[0], p[1]))} m de ti`;
+  else if (tNearFirst(p)) hint = '✅ Toca la pantalla para cerrar el cuarto';
+  else if (tPts.length) hint = `Esquina ${tPts.length + 1}: toca la pantalla · pared ${f2(dist(tPts[tPts.length - 1], p))} m`;
+  else hint = 'Esquina 1: pon la cruz en la esquina y toca la pantalla';
   $('#tHint').textContent = hint;
 }
 
@@ -633,7 +653,9 @@ async function startTilt() {
   window.addEventListener('deviceorientation', onOrient);
   tPts = []; tBuf = []; tStart = performance.now();
   $('#tH').value = f2(tH);
-  $('#tSetup').hidden = false; $('#tBar').hidden = true;
+  // Solo pregunta la altura la primera vez; después usa la que ya eligió.
+  const known = (() => { try { return !!localStorage.getItem(HKEY); } catch (e) { return false; } })();
+  $('#tSetup').hidden = known; $('#tBar').hidden = !known;
   $('#app').hidden = true; $('#tilt').hidden = false;
   tRunning = true; tLoop(); tRebuild();
 }
@@ -654,6 +676,16 @@ $('#tCal').onclick = () => {
   saveH(h); $('#tH').value = f2(h);
   if (navigator.vibrate) navigator.vibrate(40);
 };
+document.querySelectorAll('.hpick').forEach(b => b.onclick = () => {
+  saveH(parseFloat(b.dataset.h)); $('#tH').value = f2(tH);
+  $('#tSetup').hidden = true; $('#tBar').hidden = false; tRebuild();
+});
+$('#tSub').onclick = () => { $('#tSetup').hidden = false; $('#tBar').hidden = true; };
+// Tocar cualquier parte de la imagen marca la esquina (no solo el botón).
+$('#tilt').addEventListener('click', e => {
+  if (e.target.closest('.ui') || !$('#tSetup').hidden) return;
+  $('#tMark').click();
+});
 $('#tGo').onclick = () => {
   const h = parseFloat($('#tH').value);
   if (!(h >= 0.5 && h <= 2.2)) return alert('Escribe una altura entre 0.50 y 2.20 m.');
@@ -669,9 +701,9 @@ $('#tMark').onclick = () => {
 };
 function finishTilt() {
   if (tPts.length < 3) return;
-  const pts = tPts.slice();
+  const r = autoSave(tPts.slice());
   stopTilt();
-  openResult({ nombre: 'Espacio ' + (rooms.length + 1), pts, altura: '' });
+  openResult(r);
 }
 $('#tUndo').onclick = () => { tPts.pop(); tRebuild(); };
 $('#tClose').onclick = finishTilt;

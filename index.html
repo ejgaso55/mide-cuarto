@@ -149,6 +149,7 @@
         <div><label for="rAltura">Altura de muros (m), opcional</label>
           <input id="rAltura" type="number" inputmode="decimal" step="0.01" min="0" placeholder="2.50"></div>
       </div>
+      <button id="rMeasureH" class="big" style="margin-top:10px">📐 Medir altura con la cámara</button>
       <p class="muted" style="margin:14px 0 6px">Medida de cada pared</p>
       <ol id="rWalls" class="walls"></ol>
       <div class="row" style="margin-top:16px">
@@ -358,6 +359,7 @@ function autoSave(pts) {
 $('#rName').addEventListener('input', e => { current.nombre = e.target.value; renderResult(); if (current.id) persist(); });
 $('#rAltura').addEventListener('input', e => { current.altura = e.target.value; renderResult(); if (current.id) persist(); });
 $('#rBack').onclick = () => { renderHome(); show('home'); };
+$('#rMeasureH').onclick = () => startTilt('height');
 $('#rSave').onclick = () => {
   if (!current.id) { current.id = Date.now(); current.fecha = new Date().toISOString(); rooms.push(current); }
   persist(); renderHome(); show('home');
@@ -587,6 +589,13 @@ $('#btnStart').onclick = () => arOK ? startAR() : startTilt();
 const HKEY = 'midecuarto.altcel.v1';
 const D2R = Math.PI / 180;
 let tStream = null, tPts = [], tBuf = [], tRunning = false, tLast = 0, tStart = 0;
+// Modo altura: 1) apuntar a la base de la pared (da la distancia), 2) apuntar al techo.
+let tMode = 'floor', hStep = 0, hD = 0;
+function wallHeight(d) {
+  const horiz = Math.hypot(d[0], d[1]);
+  if (horiz < 0.05) return null;
+  return tH + hD * d[2] / horiz;
+}
 let tH = (() => { try { return parseFloat(localStorage.getItem(HKEY)); } catch (e) { return NaN; } })() || 1.35;
 
 // Dirección hacia donde ve la cámara trasera, en coordenadas del cuarto (x, y horizontales; z hacia arriba).
@@ -632,6 +641,10 @@ function tLoop() {
   const d = avgDir(), p = floorPoint(d);
   let hint;
   if (!d) hint = now - tStart > 2000 ? 'Tu equipo no está enviando datos del giroscopio' : 'Mueve un poco el celular…';
+  else if (tMode === 'height') {
+    if (hStep === 0) hint = p ? `1 de 2: base de la pared a ${f2(Math.hypot(p[0], p[1]))} m · toca la pantalla` : '1 de 2: apunta a la base de la pared, donde toca el piso';
+    else { const H = wallHeight(d); hint = H ? `2 de 2: sube la cruz hasta el techo · ${f2(Math.max(0, H))} m · toca` : 'No apuntes tan vertical'; }
+  }
   else if (!p) hint = 'Apunta más abajo, a una esquina del piso';
   else if (tNearFirst(p)) hint = '✅ Toca la pantalla para cerrar el cuarto';
   else if (tPts.length) hint = `Esquina ${tPts.length + 1}: toca la pantalla · pared ${f2(dist(tPts[tPts.length - 1], p))} m`;
@@ -639,7 +652,8 @@ function tLoop() {
   $('#tHint').textContent = hint;
 }
 
-async function startTilt() {
+async function startTilt(mode) {
+  tMode = mode === 'height' ? 'height' : 'floor'; hStep = 0; hD = 0;
   // iPhone pide permiso para el giroscopio; debe pedirse justo al tocar el botón.
   try {
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -656,6 +670,8 @@ async function startTilt() {
   // Solo pregunta la altura la primera vez; después usa la que ya eligió.
   const known = (() => { try { return !!localStorage.getItem(HKEY); } catch (e) { return false; } })();
   $('#tSetup').hidden = known; $('#tBar').hidden = !known;
+  $('#tClose').hidden = tMode === 'height';
+  $('#tMini').style.display = tMode === 'height' ? 'none' : '';
   $('#app').hidden = true; $('#tilt').hidden = false;
   tRunning = true; tLoop(); tRebuild();
 }
@@ -692,6 +708,7 @@ $('#tGo').onclick = () => {
   saveH(h); $('#tSetup').hidden = true; $('#tBar').hidden = false; tRebuild();
 };
 $('#tMark').onclick = () => {
+  if (tMode === 'height') return markHeight();
   const p = floorPoint(avgDir());
   if (!p) return;
   if (tNearFirst(p)) return finishTilt();
@@ -705,10 +722,27 @@ function finishTilt() {
   stopTilt();
   openResult(r);
 }
-$('#tUndo').onclick = () => { tPts.pop(); tRebuild(); };
+function markHeight() {
+  const d = avgDir();
+  if (!d) return;
+  if (hStep === 0) {
+    const p = floorPoint(d);
+    if (!p) return;
+    hD = Math.hypot(p[0], p[1]); hStep = 1;
+    if (navigator.vibrate) navigator.vibrate(30);
+    return;
+  }
+  const H = wallHeight(d);
+  if (!H || H < 1 || H > 10) return alert('Esa altura salió rara. Apunta justo donde la pared toca el techo.');
+  current.altura = f2(H);
+  if (current.id) persist();
+  if (navigator.vibrate) navigator.vibrate(40);
+  stopTilt(); openResult(current);
+}
+$('#tUndo').onclick = () => { if (tMode === 'height') { hStep = 0; } else { tPts.pop(); tRebuild(); } };
 $('#tClose').onclick = finishTilt;
-$('#tExit').onclick = $('#tExit2').onclick = () => { stopTilt(); show('home'); };
-$('#btnTilt').onclick = startTilt;
+$('#tExit').onclick = $('#tExit2').onclick = () => { stopTilt(); if (tMode === 'height') openResult(current); else show('home'); };
+$('#btnTilt').onclick = () => startTilt();
 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
   $('#btnTilt').disabled = true;
   $('#tiltMsg').textContent = window.isSecureContext ? 'Este navegador no permite usar la cámara.' : 'La página debe abrirse desde una dirección https:// para usar la cámara.';

@@ -22,6 +22,16 @@
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
+  .saved { background: #dcfce7; color: #14532d; border-radius: 12px; padding: 12px 14px; font-weight: 600; margin-top: 12px; }
+  .warn { background: #fef3c7; color: #713f12; border-radius: 12px; padding: 12px 14px; margin-top: 12px; }
+  #result { padding-bottom: 90px; }
+  .savebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; gap: 10px;
+    padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom));
+    background: var(--card); border-top: 1px solid var(--line); }
+  .savebar button { flex: 1; padding: 15px 10px; font-size: 1.05rem; }
+  #toast { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 20;
+    background: #14532d; color: #fff; padding: 12px 18px; border-radius: 999px; font-weight: 600;
+    box-shadow: 0 4px 14px rgba(0,0,0,.25); }
   body { margin: 0; background: var(--bg); color: var(--text);
     font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   main { max-width: 640px; margin: 0 auto; padding: 16px 16px 48px; }
@@ -117,7 +127,8 @@
     </details>
 
     <div class="card">
-      <h2>Espacios medidos</h2>
+      <h2>Tus cuartos</h2>
+      <div id="homeNoStore" class="warn" hidden style="margin:0 0 12px">⚠️ Este navegador no está guardando tus medidas. Abre la página directo en <b>Safari</b> (no en modo privado).</div>
       <ul id="roomList" class="rooms"></ul>
       <div id="total" class="total" hidden></div>
       <div class="row" style="margin-top:14px">
@@ -143,6 +154,8 @@
 
   <!-- RESULTADO -->
   <section id="result" hidden>
+    <div id="rSaved" class="saved">✅ Guardado en “Tus cuartos”</div>
+    <div id="rNoStore" class="warn" hidden>⚠️ Este navegador no está guardando tus medidas. Abre la página directo en <b>Safari</b> (no en modo privado) y agrégala a tu pantalla de inicio.</div>
     <div class="card">
       <label for="rName">Nombre del espacio</label>
       <input id="rName" type="text" placeholder="Baño principal">
@@ -160,13 +173,15 @@
       <p class="muted" style="margin:14px 0 6px">Medida de cada pared. ¿Alguna no cuadra con tu flexómetro? Toca “Corregir” y todo el cuarto se ajusta.</p>
       <ol id="rWalls" class="walls"></ol>
       <div class="row" style="margin-top:16px">
-        <button id="rShare" class="primary" hidden>Enviar plano</button>
+        <button id="rShare" hidden>📤 Enviar plano</button>
         <button id="rPng">Descargar plano</button>
       </div>
-      <div class="row" style="margin-top:10px">
-        <button id="rSave">Listo</button>
-      </div>
       <button id="rBack" hidden></button>
+    </div>
+    <!-- Barra fija: siempre a la vista para guardar -->
+    <div class="savebar">
+      <button id="rNext">📏 Medir otro</button>
+      <button id="rSave" class="primary">💾 Guardar</button>
     </div>
   </section>
 </main>
@@ -242,7 +257,24 @@ const KEY = 'midecuarto.rooms.v1';
 
 /* ---------- Guardado local ---------- */
 function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; } }
-function persist() { try { localStorage.setItem(KEY, JSON.stringify(rooms)); } catch (e) {} }
+// Devuelve true si de verdad quedó guardado (se vuelve a leer para comprobar).
+function persist() {
+  try {
+    const s = JSON.stringify(rooms);
+    localStorage.setItem(KEY, s);
+    return localStorage.getItem(KEY) === s;
+  } catch (e) { return false; }
+}
+const storageOK = (() => {
+  try { localStorage.setItem('mc_test', '1'); const ok = localStorage.getItem('mc_test') === '1'; localStorage.removeItem('mc_test'); return ok; }
+  catch (e) { return false; }
+})();
+function toast(text) {
+  let t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+  t.textContent = text; t.hidden = false;
+  clearTimeout(toast._h); toast._h = setTimeout(() => { t.hidden = true; }, 2200);
+}
 let rooms = load();
 let current = null;
 
@@ -417,6 +449,8 @@ function renderResult() {
 }
 function openResult(r) {
   current = r;
+  $('#rSaved').hidden = !(r.id && storageOK);
+  $('#rNoStore').hidden = storageOK;
   $('#rName').value = r.nombre || '';
   $('#rAltura').value = r.altura || '';
   renderResult();
@@ -455,9 +489,22 @@ $('#rRecto').addEventListener('change', e => {
   if (current.id) persist();
   renderResult();
 });
-$('#rSave').onclick = () => {
+function saveCurrent() {
   if (!current.id) { current.id = Date.now(); current.fecha = new Date().toISOString(); rooms.push(current); }
-  persist(); renderHome(); show('home');
+  if (!rooms.includes(current)) rooms.push(current);
+  return persist();
+}
+$('#rSave').onclick = () => {
+  const ok = saveCurrent();
+  renderHome(); show('home');
+  if (ok) toast(`✅ “${current.nombre || 'Espacio'}” guardado`);
+  else alert('No se pudo guardar en este navegador. Abre la página directo en Safari (no en modo privado).');
+};
+$('#rNext').onclick = () => {
+  const ok = saveCurrent();
+  renderHome(); show('home');
+  if (ok) toast('✅ Guardado. Vamos con el siguiente');
+  $('#btnStart').click();
 };
 
 async function planPNG() {
@@ -492,6 +539,7 @@ if (navigator.canShare) {
 /* ---------- Inicio: lista de espacios ---------- */
 function renderHome() {
   const ul = $('#roomList');
+  $('#homeNoStore').hidden = storageOK;
   if (!rooms.length) { ul.innerHTML = '<li class="muted">Aún no hay espacios guardados.</li>'; $('#total').hidden = true; return; }
   let tot = 0;
   ul.innerHTML = rooms.map((r, i) => {

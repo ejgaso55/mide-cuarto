@@ -90,6 +90,9 @@
       <button id="btnStart" class="primary big" style="font-size:1.25rem;padding:22px">📏 Medir un cuarto</button>
       <p id="startMsg" class="muted" style="margin:10px 0 14px;text-align:center">Apunta a cada esquina del piso y toca la pantalla.</p>
       <button id="btnManual" class="big">✏️ Escribir medidas a mano</button>
+      <label style="display:flex;gap:10px;align-items:center;justify-content:center;margin-top:14px;color:var(--text)">
+        <input id="voiceOn" type="checkbox" style="width:22px;height:22px"> 🔊 Voz que me guía al medir
+      </label>
       <button id="btnAR" hidden></button><button id="btnTilt" hidden></button>
       <p id="arMsg" hidden></p><p id="tiltMsg" hidden></p>
     </div>
@@ -144,7 +147,11 @@
       <label for="rName">Nombre del espacio</label>
       <input id="rName" type="text" placeholder="Baño principal">
       <div id="rPlan" class="plan" style="margin-top:14px"></div>
+      <label id="rRectoBox" style="display:flex;gap:10px;align-items:center;margin:12px 0 0;color:var(--text);font-size:.95rem">
+        <input id="rRecto" type="checkbox" style="width:22px;height:22px;flex:none"> Esquinas rectas a 90° (recomendado)
+      </label>
       <div id="rStats" class="stats"></div>
+      <div id="rQty" class="card" style="margin:12px 0;padding:14px"></div>
       <div class="row">
         <div><label for="rAltura">Altura de muros (m), opcional</label>
           <input id="rAltura" type="number" inputmode="decimal" step="0.01" min="0" placeholder="2.50"></div>
@@ -239,6 +246,25 @@ function persist() { try { localStorage.setItem(KEY, JSON.stringify(rooms)); } c
 let rooms = load();
 let current = null;
 
+/* ---------- Voz que guía ---------- */
+const VKEY = 'midecuarto.voz.v1';
+let voiceOn = (() => { try { return localStorage.getItem(VKEY) !== '0'; } catch (e) { return true; } })();
+$('#voiceOn').checked = voiceOn;
+$('#voiceOn').addEventListener('change', e => {
+  voiceOn = e.target.checked;
+  try { localStorage.setItem(VKEY, voiceOn ? '1' : '0'); } catch (err) {}
+  if (voiceOn) say('Voz activada');
+});
+function say(text) {
+  try {
+    if (!voiceOn || !window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'es-MX'; u.rate = 1.05;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  } catch (e) {}
+}
+const m2Voz = v => `${f2(v).replace('.', ' punto ')}`;
+
 function show(id) {
   for (const s of ['home', 'manual', 'result']) $('#' + s).hidden = s !== id;
   window.scrollTo(0, 0);
@@ -260,6 +286,29 @@ function normalize(p) {
   return r.map(([x, y]) => [x - mx, y - my]);
 }
 const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+// Endereza un cuarto "casi recto": cada pared a 0°/90° y reparte el pequeño error para que cierre.
+// Si alguna pared está a más de 15° de recta (pared en diagonal), lo deja como está.
+function squarePts(p) {
+  if (!p || p.length < 4) return null;
+  const n = normalize(p);
+  const moves = [];
+  for (let i = 0; i < n.length; i++) {
+    const a = n[i], b = n[(i + 1) % n.length];
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy), ang = Math.atan2(dy, dx);
+    const q = Math.round(ang / (Math.PI / 2));
+    if (Math.abs(ang - q * Math.PI / 2) > 15 * Math.PI / 180) return null;
+    const k = ((q % 4) + 4) % 4;
+    moves.push(k === 0 ? [L, 0] : k === 1 ? [0, L] : k === 2 ? [-L, 0] : [0, -L]);
+  }
+  let ex = 0, ey = 0, sx = 0, sy = 0;
+  moves.forEach(([x, y]) => { ex += x; ey += y; sx += Math.abs(x); sy += Math.abs(y); });
+  const out = [[0, 0]];
+  moves.slice(0, -1).forEach(([x, y]) => {
+    const l = out[out.length - 1];
+    out.push([l[0] + x - (sx ? ex * Math.abs(x) / sx : 0), l[1] + y - (sy ? ey * Math.abs(y) / sy : 0)]);
+  });
+  return out;
+}
 function stats(pts, altura) {
   const n = normalize(pts);
   const w = Math.max(...n.map(q => q[0])), h = Math.max(...n.map(q => q[1]));
@@ -350,6 +399,19 @@ function renderResult() {
     ['Área de piso', f2(st.area) + ' m²'], ['Perímetro', f2(st.perimetro) + ' m'],
     ['Área de muros', st.muros ? f2(st.muros) + ' m²' : '—'], ['Esquinas', String(current.pts.length)],
   ].map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
+  const canSquare = !!(current.ptsRaw && squarePts(current.ptsRaw));
+  $('#rRectoBox').hidden = !canSquare;
+  $('#rRecto').checked = !!current.recto;
+  // Cantidades de obra para cotizar.
+  const q = [
+    ['Piso (+10% desperdicio)', `${f2(st.area * 1.10)} m²`],
+    ['Zoclo (sin descontar puertas)', `${f2(st.perimetro)} ml`],
+    ['Plafón / techo', `${f2(st.area)} m²`],
+  ];
+  if (st.muros) q.push(['Pintura de muros', `${f2(st.muros)} m²`], ['Pintura aprox. (2 manos)', `${Math.ceil(st.muros * 2 / 10)} L`]);
+  $('#rQty').innerHTML = `<b>🧮 Cantidades para cotizar</b>` +
+    q.map(([k, v]) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line)"><span class="muted">${k}</span><b style="font-variant-numeric:tabular-nums">${v}</b></div>`).join('') +
+    (st.muros ? '' : '<p class="muted" style="margin:8px 0 0">Agrega la altura para calcular muros y pintura.</p>');
   $('#rWalls').innerHTML = st.walls.map((w, i) =>
     `<li style="margin:6px 0">${f2(w)} m <button class="fix" data-w="${i}" style="padding:6px 12px;margin-left:8px">Corregir</button></li>`).join('');
 }
@@ -362,7 +424,9 @@ function openResult(r) {
 }
 // Cada medición se guarda sola al terminar; los cambios de nombre o altura también.
 function autoSave(pts) {
-  const r = { id: Date.now(), fecha: new Date().toISOString(), nombre: 'Espacio ' + (rooms.length + 1), pts, altura: '' };
+  const sq = squarePts(pts);
+  const r = { id: Date.now(), fecha: new Date().toISOString(), nombre: 'Espacio ' + (rooms.length + 1),
+    pts: sq || pts, ptsRaw: pts, recto: !!sq, altura: '' };
   rooms.push(r); persist();
   return r;
 }
@@ -379,6 +443,15 @@ $('#rWalls').addEventListener('click', e => {
   const k = v / w;
   if (k < 0.5 || k > 2) return alert('Esa medida es muy distinta. Revisa que sea la misma pared.');
   current.pts = current.pts.map(([x, y]) => [x * k, y * k]);
+  if (current.ptsRaw) current.ptsRaw = current.ptsRaw.map(([x, y]) => [x * k, y * k]);
+  if (current.id) persist();
+  renderResult();
+});
+$('#rRecto').addEventListener('change', e => {
+  if (!current.ptsRaw) return;
+  const sq = squarePts(current.ptsRaw);
+  current.recto = e.target.checked && !!sq;
+  current.pts = current.recto ? sq : current.ptsRaw;
   if (current.id) persist();
   renderResult();
 });
@@ -544,6 +617,7 @@ function onSelect() {
   if (nearFirst()) return finishAR();
   arPts.push(reticlePos.clone());
   if (navigator.vibrate) navigator.vibrate(30);
+  say(`Esquina ${arPts.length}`);
   rebuildMarks();
 }
 
@@ -559,7 +633,10 @@ function onSessionEnd() {
   if (hitSource) { hitSource.cancel(); hitSource = null; }
   session = null; arPts = []; rebuildMarks();
   $('#ar').hidden = true;
-  if (finishing) { finishing = false; openResult(current); } else show('home');
+  if (finishing) {
+    finishing = false; openResult(current);
+    say(`Listo. Tu cuarto mide ${m2Voz(stats(current.pts).area)} metros cuadrados`);
+  } else show('home');
 }
 
 async function startAR() {
@@ -766,6 +843,10 @@ $('#tMark').onclick = () => {
     }
   }
   if (navigator.vibrate) navigator.vibrate(30);
+  if (refOk && tPts.length === 2) say('Referencia aplicada. Sigue con la esquina 3');
+  else if (tPts.length === 1) say(refLen ? 'Ahora el otro extremo de la pared que mediste' : 'Esquina 1. Sigue con la siguiente');
+  else if (tPts.length) say(`Esquina ${tPts.length}`);
+  if (tPts.length === 3) setTimeout(() => say('Cuando termines, apunta otra vez a la primera esquina para cerrar'), 900);
   tRebuild();
 };
 function finishTilt() {
@@ -773,6 +854,7 @@ function finishTilt() {
   const r = autoSave(tPts.slice());
   stopTilt();
   openResult(r);
+  say(`Listo. Tu cuarto mide ${m2Voz(stats(r.pts).area)} metros cuadrados`);
 }
 function markHeight() {
   const d = avgDir();
@@ -782,6 +864,7 @@ function markHeight() {
     if (!p) return;
     hD = Math.hypot(p[0], p[1]); hStep = 1;
     if (navigator.vibrate) navigator.vibrate(30);
+    say('Ahora sube la cruz hasta el techo y toca');
     return;
   }
   const H = wallHeight(d);
@@ -790,6 +873,7 @@ function markHeight() {
   if (current.id) persist();
   if (navigator.vibrate) navigator.vibrate(40);
   stopTilt(); openResult(current);
+  say(`Altura ${m2Voz(H)} metros`);
 }
 $('#tUndo').onclick = () => { if (tMode === 'height') { hStep = 0; } else { tPts.pop(); tRebuild(); } };
 $('#tClose').onclick = finishTilt;

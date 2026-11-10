@@ -150,7 +150,7 @@
           <input id="rAltura" type="number" inputmode="decimal" step="0.01" min="0" placeholder="2.50"></div>
       </div>
       <button id="rMeasureH" class="big" style="margin-top:10px">📐 Medir altura con la cámara</button>
-      <p class="muted" style="margin:14px 0 6px">Medida de cada pared</p>
+      <p class="muted" style="margin:14px 0 6px">Medida de cada pared. ¿Alguna no cuadra con tu flexómetro? Toca “Corregir” y todo el cuarto se ajusta.</p>
       <ol id="rWalls" class="walls"></ol>
       <div class="row" style="margin-top:16px">
         <button id="rShare" class="primary" hidden>Enviar plano</button>
@@ -215,6 +215,15 @@
       </div>
     </details>
     <div class="row" style="margin-top:12px"><button id="tExit2">Cancelar</button></div>
+  </div>
+  <div id="tRef" class="setup ui" hidden>
+    <p style="font-size:1.1rem;margin-bottom:6px"><b>📏 Medida de referencia</b></p>
+    <p>Mide con flexómetro <b>una pared</b> del cuarto y escribe cuánto mide. Esa será la <b>primera pared</b> que marques, y con ella la app ajusta todas las demás medidas.</p>
+    <input id="tRefIn" type="number" inputmode="decimal" step="0.01" min="0.3" placeholder="Ej. 3.20 m" style="font-size:1.2rem">
+    <div class="row" style="margin-top:12px">
+      <button id="tRefSkip">Medir sin referencia</button>
+      <button id="tRefGo" class="primary">Empezar</button>
+    </div>
   </div>
 </div>
 
@@ -341,7 +350,8 @@ function renderResult() {
     ['Área de piso', f2(st.area) + ' m²'], ['Perímetro', f2(st.perimetro) + ' m'],
     ['Área de muros', st.muros ? f2(st.muros) + ' m²' : '—'], ['Esquinas', String(current.pts.length)],
   ].map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
-  $('#rWalls').innerHTML = st.walls.map(w => `<li>${f2(w)} m</li>`).join('');
+  $('#rWalls').innerHTML = st.walls.map((w, i) =>
+    `<li style="margin:6px 0">${f2(w)} m <button class="fix" data-w="${i}" style="padding:6px 12px;margin-left:8px">Corregir</button></li>`).join('');
 }
 function openResult(r) {
   current = r;
@@ -360,6 +370,18 @@ $('#rName').addEventListener('input', e => { current.nombre = e.target.value; re
 $('#rAltura').addEventListener('input', e => { current.altura = e.target.value; renderResult(); if (current.id) persist(); });
 $('#rBack').onclick = () => { renderHome(); show('home'); };
 $('#rMeasureH').onclick = () => startTilt('height');
+// Corregir una pared con la medida del flexómetro: todo el cuarto se escala igual.
+$('#rWalls').addEventListener('click', e => {
+  const b = e.target.closest('.fix'); if (!b) return;
+  const i = +b.dataset.w, w = stats(current.pts).walls[i];
+  const v = parseFloat(String(prompt(`Pared ${i + 1}: la app midió ${f2(w)} m.\n¿Cuánto mide con flexómetro? (metros)`, f2(w)) || '').replace(',', '.'));
+  if (!(v > 0)) return;
+  const k = v / w;
+  if (k < 0.5 || k > 2) return alert('Esa medida es muy distinta. Revisa que sea la misma pared.');
+  current.pts = current.pts.map(([x, y]) => [x * k, y * k]);
+  if (current.id) persist();
+  renderResult();
+});
 $('#rSave').onclick = () => {
   if (!current.id) { current.id = Date.now(); current.fecha = new Date().toISOString(); rooms.push(current); }
   persist(); renderHome(); show('home');
@@ -591,6 +613,15 @@ const D2R = Math.PI / 180;
 let tStream = null, tPts = [], tBuf = [], tRunning = false, tLast = 0, tStart = 0;
 // Modo altura: 1) apuntar a la base de la pared (da la distancia), 2) apuntar al techo.
 let tMode = 'floor', hStep = 0, hD = 0;
+// Medida real de la primera pared (flexómetro). 0 = sin referencia.
+let refLen = 0, refOk = false;
+// Después de elegir altura: en modo piso se pide la referencia; en modo altura se empieza directo.
+function afterHeight() {
+  $('#tSetup').hidden = true;
+  if (tMode === 'floor') { $('#tRef').hidden = false; $('#tBar').hidden = true; $('#tRefIn').value = refLen ? f2(refLen) : ''; }
+  else { $('#tRef').hidden = true; $('#tBar').hidden = false; }
+  tRebuild();
+}
 function wallHeight(d) {
   const horiz = Math.hypot(d[0], d[1]);
   if (horiz < 0.05) return null;
@@ -630,7 +661,7 @@ function tRebuild() {
   $('#tMini').innerHTML = planSVG(tPts, { mini: true, W: 110, H: 96, closed: false }).replace(/^<svg[^>]*>|<\/svg>$/g, '');
   $('#tClose').disabled = tPts.length < 3;
   const per = tPts.reduce((s, p, i) => i ? s + dist(tPts[i - 1], p) : 0, 0);
-  $('#tSub').textContent = (tPts.length ? `${tPts.length} esquina${tPts.length > 1 ? 's' : ''} · ${f2(per)} m de pared · ` : '') + `altura ${f2(tH)} m (cambiar)`;
+  $('#tSub').textContent = (refOk ? '✓ ajustado con tu referencia · ' : '') + (tPts.length ? `${tPts.length} esquina${tPts.length > 1 ? 's' : ''} · ${f2(per)} m de pared · ` : '') + `altura ${f2(tH)} m (cambiar)`;
 }
 function tLoop() {
   if (!tRunning) return;
@@ -647,8 +678,9 @@ function tLoop() {
   }
   else if (!p) hint = 'Apunta más abajo, a una esquina del piso';
   else if (tNearFirst(p)) hint = '✅ Toca la pantalla para cerrar el cuarto';
+  else if (refLen && tPts.length === 1) hint = `Esquina 2: el otro extremo de la pared de ${f2(refLen)} m`;
   else if (tPts.length) hint = `Esquina ${tPts.length + 1}: toca la pantalla · pared ${f2(dist(tPts[tPts.length - 1], p))} m`;
-  else hint = 'Esquina 1: pon la cruz en la esquina y toca la pantalla';
+  else hint = refLen ? `Esquina 1: un extremo de la pared de ${f2(refLen)} m` : 'Esquina 1: pon la cruz en la esquina y toca la pantalla';
   $('#tHint').textContent = hint;
 }
 
@@ -669,7 +701,9 @@ async function startTilt(mode) {
   $('#tH').value = f2(tH);
   // Solo pregunta la altura la primera vez; después usa la que ya eligió.
   const known = (() => { try { return !!localStorage.getItem(HKEY); } catch (e) { return false; } })();
-  $('#tSetup').hidden = known; $('#tBar').hidden = !known;
+  refOk = false;
+  $('#tSetup').hidden = known; $('#tBar').hidden = true; $('#tRef').hidden = true;
+  if (known) afterHeight();
   $('#tClose').hidden = tMode === 'height';
   $('#tMini').style.display = tMode === 'height' ? 'none' : '';
   $('#app').hidden = true; $('#tilt').hidden = false;
@@ -694,12 +728,18 @@ $('#tCal').onclick = () => {
 };
 document.querySelectorAll('.hpick').forEach(b => b.onclick = () => {
   saveH(parseFloat(b.dataset.h)); $('#tH').value = f2(tH);
-  $('#tSetup').hidden = true; $('#tBar').hidden = false; tRebuild();
+  afterHeight();
 });
-$('#tSub').onclick = () => { $('#tSetup').hidden = false; $('#tBar').hidden = true; };
+$('#tRefGo').onclick = () => {
+  const v = parseFloat($('#tRefIn').value);
+  if (!(v >= 0.3 && v <= 30)) return alert('Escribe la medida de la pared en metros, por ejemplo 3.20');
+  refLen = v; $('#tRef').hidden = true; $('#tBar').hidden = false; tRebuild();
+};
+$('#tRefSkip').onclick = () => { refLen = 0; $('#tRef').hidden = true; $('#tBar').hidden = false; tRebuild(); };
+$('#tSub').onclick = () => { $('#tSetup').hidden = false; $('#tBar').hidden = true; $('#tRef').hidden = true; };
 // Tocar cualquier parte de la imagen marca la esquina (no solo el botón).
 $('#tilt').addEventListener('click', e => {
-  if (e.target.closest('.ui') || !$('#tSetup').hidden) return;
+  if (e.target.closest('.ui') || !$('#tSetup').hidden || !$('#tRef').hidden) return;
   $('#tMark').click();
 });
 $('#tGo').onclick = () => {
@@ -713,6 +753,18 @@ $('#tMark').onclick = () => {
   if (!p) return;
   if (tNearFirst(p)) return finishTilt();
   tPts.push(p);
+  // Con la primera pared marcada, se ajusta la escala con la medida real.
+  if (refLen && tPts.length === 2) {
+    const k = refLen / dist(tPts[0], tPts[1]);
+    if (k > 0.5 && k < 2) {
+      tPts = tPts.map(([x, y]) => [x * k, y * k]);
+      saveH(tH * k);   // la app aprende tu altura real para la próxima vez
+      refOk = true;
+    } else {
+      tPts.pop();
+      alert(`La primera pared salió de ${f2(dist(tPts[0], p))} m y tu referencia es ${f2(refLen)} m. Revisa que marcaste las dos esquinas de la pared que mediste.`);
+    }
+  }
   if (navigator.vibrate) navigator.vibrate(30);
   tRebuild();
 };

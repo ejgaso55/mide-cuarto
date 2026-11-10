@@ -164,7 +164,6 @@
         <input id="rRecto" type="checkbox" style="width:22px;height:22px;flex:none"> Esquinas rectas a 90° (recomendado)
       </label>
       <div id="rStats" class="stats"></div>
-      <div id="rQty" class="card" style="margin:12px 0;padding:14px"></div>
       <div class="row">
         <div><label for="rAltura">Altura de muros (m), opcional</label>
           <input id="rAltura" type="number" inputmode="decimal" step="0.01" min="0" placeholder="2.50"></div>
@@ -434,16 +433,6 @@ function renderResult() {
   const canSquare = !!(current.ptsRaw && squarePts(current.ptsRaw));
   $('#rRectoBox').hidden = !canSquare;
   $('#rRecto').checked = !!current.recto;
-  // Cantidades de obra para cotizar.
-  const q = [
-    ['Piso (+10% desperdicio)', `${f2(st.area * 1.10)} m²`],
-    ['Zoclo (sin descontar puertas)', `${f2(st.perimetro)} ml`],
-    ['Plafón / techo', `${f2(st.area)} m²`],
-  ];
-  if (st.muros) q.push(['Pintura de muros', `${f2(st.muros)} m²`], ['Pintura aprox. (2 manos)', `${Math.ceil(st.muros * 2 / 10)} L`]);
-  $('#rQty').innerHTML = `<b>🧮 Cantidades para cotizar</b>` +
-    q.map(([k, v]) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line)"><span class="muted">${k}</span><b style="font-variant-numeric:tabular-nums">${v}</b></div>`).join('') +
-    (st.muros ? '' : '<p class="muted" style="margin:8px 0 0">Agrega la altura para calcular muros y pintura.</p>');
   $('#rWalls').innerHTML = st.walls.map((w, i) =>
     `<li style="margin:6px 0">${f2(w)} m <button class="fix" data-w="${i}" style="padding:6px 12px;margin-left:8px">Corregir</button></li>`).join('');
 }
